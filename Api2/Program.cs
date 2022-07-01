@@ -1,69 +1,93 @@
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Serilog;
+using Serilog.Events;
 
-var builder = WebApplication.CreateBuilder(args);
+Log.Logger = new LoggerConfiguration()
+    .CreateBootstrapLogger();
 
-// Telemetry
-// Define some important constants and the activity source
-var serviceName = "Api2";
-var serviceVersion = "1.0.0";
-var serviceInstanceId = Environment.MachineName;
+try
+{
+    var builder = WebApplication.CreateBuilder(args);
 
-var telemetryBuilder = ResourceBuilder.CreateDefault()
-    .AddService(serviceName: serviceName, serviceVersion: serviceVersion, serviceInstanceId: serviceInstanceId);
+    // Telemetry
+    // Define some important constants and the activity source
+    var serviceName = "Api2";
+    var serviceVersion = "1.0.0";
+    var serviceInstanceId = Environment.MachineName;
 
-builder.Services.AddOpenTelemetryTracing(b => b
-    .AddConsoleExporter()
-    .AddJaegerExporter(b => b.Endpoint = new Uri("http://localhost:6831"))
-    .AddSource(serviceName)
-    .SetResourceBuilder(telemetryBuilder)
-    .AddHttpClientInstrumentation()
-    .AddAspNetCoreInstrumentation(b =>
-    {
-        b.RecordException = true;
-        b.Enrich = (activity, _, _) =>
+    var telemetryBuilder = ResourceBuilder.CreateDefault()
+        .AddService(serviceName: serviceName, serviceVersion: serviceVersion, serviceInstanceId: serviceInstanceId);
+
+    builder.Services.AddOpenTelemetryTracing(b => b
+        .AddConsoleExporter()
+        .AddJaegerExporter(b => b.Endpoint = new Uri("http://localhost:6831"))
+        .AddSource(serviceName)
+        .SetResourceBuilder(telemetryBuilder)
+        .AddHttpClientInstrumentation()
+        .AddAspNetCoreInstrumentation(b =>
         {
-            if (activity.GetTagItem("user.id") != null)
+            b.RecordException = true;
+            b.Enrich = (activity, _, _) =>
             {
-                return;
-            }
+                if (activity.GetTagItem("user.id") != null)
+                {
+                    return;
+                }
 
-            var userId = activity.GetBaggageItem("user.id");
+                var userId = activity.GetBaggageItem("user.id");
 
-            if (userId != null)
-            {
-                activity.AddTag("user.id", userId);
-            }
-        };
-    }));
+                if (userId != null)
+                {
+                    activity.AddTag("user.id", userId);
+                }
+            };
+        }));
 
-// Logging
-builder.Logging.ClearProviders();
-builder.Logging.AddOpenTelemetry(b =>
-{
-    b.SetResourceBuilder(telemetryBuilder);
-    b.ParseStateValues = true;
-    b.IncludeFormattedMessage = true;
+    // Logging
+    builder.Logging.ClearProviders();
 
-    b.AttachLogsToActivityEvent();
-});
+    builder.Host.UseSerilog((context, services, configuration) => configuration
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Warning) // Disable request logging - requests are traced by OpenTelemetry
+            .ReadFrom.Configuration(context.Configuration)
+            .ReadFrom.Services(services)
+            .Enrich.FromLogContext(),
+        writeToProviders: true);
 
-builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+    builder.Logging.AddOpenTelemetry(b =>
+    {
+        b.SetResourceBuilder(telemetryBuilder);
+        b.ParseStateValues = true;
+        b.IncludeFormattedMessage = true;
 
-var app = builder.Build();
+        b.AttachLogsToActivityEvent();
+    });
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    builder.Services.AddControllers();
+    // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen();
+
+    var app = builder.Build();
+
+    // Configure the HTTP request pipeline.
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
+
+    app.UseAuthorization();
+
+    app.MapControllers();
+
+    app.Run();
 }
-
-app.UseAuthorization();
-
-app.MapControllers();
-
-app.Run();
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Host terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
