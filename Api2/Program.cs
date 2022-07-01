@@ -19,7 +19,24 @@ builder.Services.AddOpenTelemetryTracing(b =>
         ResourceBuilder.CreateDefault()
             .AddService(serviceName: serviceName, serviceVersion: serviceVersion, serviceInstanceId: serviceInstanceId))
     .AddHttpClientInstrumentation()
-    .AddAspNetCoreInstrumentation(b => b.RecordException = true);
+    .AddAspNetCoreInstrumentation(b =>
+    {
+        b.RecordException = true;
+        b.Enrich = (activity, _, _) =>
+        {
+            if (activity.GetTagItem("user.id") != null)
+            {
+                return;
+            }
+
+            var userId = activity.GetBaggageItem("user.id");
+
+            if (userId != null)
+            {
+                activity.AddTag("user.id", userId);
+            }
+        };
+    });
 });
 
 // Logging
