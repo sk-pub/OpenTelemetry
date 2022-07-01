@@ -9,15 +9,14 @@ var serviceName = "Api2";
 var serviceVersion = "1.0.0";
 var serviceInstanceId = Environment.MachineName;
 
-builder.Services.AddOpenTelemetryTracing(b =>
-{
-    b
+var telemetryBuilder = ResourceBuilder.CreateDefault()
+    .AddService(serviceName: serviceName, serviceVersion: serviceVersion, serviceInstanceId: serviceInstanceId);
+
+builder.Services.AddOpenTelemetryTracing(b => b
     .AddConsoleExporter()
     .AddJaegerExporter(b => b.Endpoint = new Uri("http://localhost:6831"))
     .AddSource(serviceName)
-    .SetResourceBuilder(
-        ResourceBuilder.CreateDefault()
-            .AddService(serviceName: serviceName, serviceVersion: serviceVersion, serviceInstanceId: serviceInstanceId))
+    .SetResourceBuilder(telemetryBuilder)
     .AddHttpClientInstrumentation()
     .AddAspNetCoreInstrumentation(b =>
     {
@@ -36,11 +35,18 @@ builder.Services.AddOpenTelemetryTracing(b =>
                 activity.AddTag("user.id", userId);
             }
         };
-    });
-});
+    }));
 
 // Logging
 builder.Logging.ClearProviders();
+builder.Logging.AddOpenTelemetry(b =>
+{
+    b.SetResourceBuilder(telemetryBuilder);
+    b.ParseStateValues = true;
+    b.IncludeFormattedMessage = true;
+
+    b.AttachLogsToActivityEvent();
+});
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
