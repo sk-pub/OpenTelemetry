@@ -1,7 +1,9 @@
+using Api2;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
+using System.Diagnostics;
 
 Log.Logger = new LoggerConfiguration()
     .CreateBootstrapLogger();
@@ -11,7 +13,6 @@ try
     var builder = WebApplication.CreateBuilder(args);
 
     // Telemetry
-    // Define some important constants and the activity source
     var serviceName = "Api2";
     var serviceVersion = "1.0.0";
     var serviceInstanceId = Environment.MachineName;
@@ -20,7 +21,8 @@ try
         .AddService(serviceName: serviceName, serviceVersion: serviceVersion, serviceInstanceId: serviceInstanceId);
 
     builder.Services.AddOpenTelemetryTracing(b => b
-        .AddConsoleExporter()
+        // No console exporter - console logs are done by Serilog
+        //.AddConsoleExporter()
         .AddJaegerExporter(b => b.Endpoint = new Uri("http://localhost:6831"))
         .AddSource(serviceName)
         .SetResourceBuilder(telemetryBuilder)
@@ -51,7 +53,7 @@ try
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning) // Disable request logging - requests are traced by OpenTelemetry
             .ReadFrom.Configuration(context.Configuration)
             .ReadFrom.Services(services)
-            .Enrich.FromLogContext(),
+            .Enrich.With<TraceLogEnricher>(),
         writeToProviders: true);
 
     builder.Logging.AddOpenTelemetry(b =>
