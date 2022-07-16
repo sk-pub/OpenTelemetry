@@ -1,3 +1,5 @@
+using OpenTelemetry;
+using OpenTelemetry.Extensions.Propagators;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
@@ -11,6 +13,8 @@ builder.Services.AddHttpClient();
 var serviceName = "Api1";
 var serviceVersion = "1.0.0";
 var serviceInstanceId = Environment.MachineName;
+
+Sdk.SetDefaultTextMapPropagator(new JaegerPropagator());
 
 builder.Services.AddOpenTelemetryTracing(b =>
 {

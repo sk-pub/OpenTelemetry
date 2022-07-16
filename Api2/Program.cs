@@ -1,9 +1,10 @@
 using Api2;
+using OpenTelemetry;
+using OpenTelemetry.Extensions.Propagators;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
-using System.Diagnostics;
 
 Log.Logger = new LoggerConfiguration()
     .CreateBootstrapLogger();
@@ -19,6 +20,8 @@ try
 
     var telemetryBuilder = ResourceBuilder.CreateDefault()
         .AddService(serviceName: serviceName, serviceVersion: serviceVersion, serviceInstanceId: serviceInstanceId);
+
+    Sdk.SetDefaultTextMapPropagator(new JaegerPropagator());
 
     builder.Services.AddOpenTelemetryTracing(b => b
         // No console exporter - console logs are done by Serilog

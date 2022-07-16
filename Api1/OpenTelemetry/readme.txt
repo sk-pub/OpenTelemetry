@@ -1,0 +1,1 @@
+﻿TODO: Update OpenTelemetry.Extensions.Propagators package once a version with https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry.Extensions.Propagators/JaegerPropagator.cs is released
